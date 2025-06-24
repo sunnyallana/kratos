@@ -67,29 +67,6 @@ def extract_important_keypoints(results, important_landmarks: list) -> list:
         data.append([keypoint.x, keypoint.y, keypoint.z, keypoint.visibility])
     return np.array(data).flatten().tolist()
 
-def draw_warning_box(image, text, x, y, width, height):
-    '''
-    Draw a prominent warning box with black background and red text
-    '''
-    # Create black background
-    cv2.rectangle(image, (x, y), (x + width, y + height), (0, 0, 0), -1)
-    
-    # Draw bright red border
-    cv2.rectangle(image, (x, y), (x + width, y + height), (0, 0, 255), 4)
-    
-    # Add warning text in bright red
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.7
-    thickness = 2
-    text_color = (0, 0, 255)  # Bright red
-    
-    # Center text in box
-    text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
-    text_x = x + (width - text_size[0]) // 2
-    text_y = y + (height + text_size[1]) // 2
-    
-    cv2.putText(image, text, (text_x, text_y), font, font_scale, text_color, thickness)
-
 class BicepPoseAnalysis:
     def __init__(self, side: str, stage_down_threshold: float, stage_up_threshold: float, peak_contraction_threshold: float, loose_upper_arm_angle_threshold: float, visibility_threshold: float):
         # Initialize thresholds
@@ -110,12 +87,10 @@ class BicepPoseAnalysis:
 
         # Params for loose upper arm error detection
         self.loose_upper_arm = False
-        self.current_loose_upper_arm = False  # Current frame error status
 
         # Params for peak contraction error detection
         self.peak_contraction_angle = 1000
         self.peak_contraction_frame = None
-        self.current_peak_contraction_error = False  # Current frame error status
 
     def get_joints(self, landmarks) -> bool:
         '''
@@ -159,10 +134,6 @@ class BicepPoseAnalysis:
         '''
         self.get_joints(landmarks)
 
-        # Reset current frame error status
-        self.current_loose_upper_arm = False
-        self.current_peak_contraction_error = False
-
         # Cancel calculation if visibility is poor
         if not self.is_visible:
             return (None, None)
@@ -181,7 +152,6 @@ class BicepPoseAnalysis:
 
         # * Evaluation for LOOSE UPPER ARM error
         if ground_upper_arm_angle > self.loose_upper_arm_angle_threshold:
-            self.current_loose_upper_arm = True  # Set current frame error
             # Limit the saved frame
             if not self.loose_upper_arm:
                 self.loose_upper_arm = True
@@ -199,7 +169,6 @@ class BicepPoseAnalysis:
         elif self.stage == "down":
             # * Evaluate if the peak is higher than the threshold if True, marked as an error then saved that frame
             if self.peak_contraction_angle != 1000 and self.peak_contraction_angle >= self.peak_contraction_threshold:
-                self.current_peak_contraction_error = True  # Set current frame error
                 # save_frame_as_image(self.peak_contraction_frame, f"{self.side} - Peak Contraction: {self.peak_contraction_angle}")
                 self.detected_errors["PEAK_CONTRACTION"] += 1
 
@@ -280,29 +249,34 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
             break
 
         # Flip image horizontally for mirror effect (optional)
-        # image = cv2.flip(image, 1)
+        image = cv2.flip(image, 1)
+
+        # Reduce size of a frame (optional, comment out if you want full resolution)
+        # image = rescale_frame(image, 40)
 
         video_dimensions = [image.shape[1], image.shape[0]]
 
         # Recolor image from BGR to RGB for mediapipe
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image_rgb.flags.writeable = False
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image.flags.writeable = False
 
-        results = pose.process(image_rgb)
-
-        # Recolor image from RGB to BGR for OpenCV
-        image = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+        results = pose.process(image)
 
         if not results.pose_landmarks:
-            # Show no human detected on camera feed
-            cv2.putText(image, "NO HUMAN DETECTED", (image.shape[1]//2 - 200, image.shape[0]//2), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3, cv2.LINE_AA)
+            # Recolor back to BGR for display
+            image.flags.writeable = True
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            cv2.putText(image, "No human detected", (50, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow("Bicep Curl Analysis", image)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
             continue
 
-        # Draw landmarks and connections on black background
+        # Recolor image from RGB to BGR for OpenCV
+        image.flags.writeable = True
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+        # Draw landmarks and connections
         mp_drawing.draw_landmarks(
             image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
             mp_drawing.DrawingSpec(color=(244, 117, 66), thickness=2, circle_radius=2),
@@ -334,111 +308,65 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
                 predicted_class = 0
                 prediction_probability = 0.0
 
-            # Enhanced Visualization - Keep camera feed with BLACK text backgrounds and PROMINENT RED warnings
+            # Visualization - Centered metrics panel
             frame_width = image.shape[1]
-            frame_height = image.shape[0]
             
-            # Create header panel for rep counter with BLACK background
-            panel_width = 400
-            panel_height = 80
+            # Create centered black background for metrics
+            panel_width = 700
+            panel_height = 70
             panel_x = (frame_width - panel_width) // 2
-            panel_y = 20
+            panel_y = 10
             
-            # Draw black background with white border for counter
+            # Draw black background rectangle
             cv2.rectangle(image, (panel_x, panel_y), (panel_x + panel_width, panel_y + panel_height), (0, 0, 0), -1)
+            
+            # Draw border
             cv2.rectangle(image, (panel_x, panel_y), (panel_x + panel_width, panel_y + panel_height), (255, 255, 255), 2)
 
-            # Text settings for counter
+            # Text settings
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 1.0
+            font_scale = 0.6
             text_color = (255, 255, 255)  # White text
             thickness = 2
             
-            # Title
-            title_y = panel_y + 30
-            cv2.putText(image, "BICEP CURLS", (panel_x + 120, title_y), font, font_scale, text_color, thickness)
+            # Row 1 - Labels
+            y_offset = panel_y + 20
+            cv2.putText(image, "RIGHT", (panel_x + 20, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, "LEFT", (panel_x + 120, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, "R_PC", (panel_x + 220, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, "R_LUA", (panel_x + 300, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, "L_PC", (panel_x + 400, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, "L_LUA", (panel_x + 480, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, "POSTURE", (panel_x + 580, y_offset), font, font_scale, text_color, thickness)
+
+            # Row 2 - Values
+            y_offset = panel_y + 50
+            cv2.putText(image, str(right_arm_analysis.counter) if right_arm_analysis.is_visible else "UNK", 
+                       (panel_x + 35, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, str(left_arm_analysis.counter) if left_arm_analysis.is_visible else "UNK", 
+                       (panel_x + 125, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, str(right_arm_analysis.detected_errors["PEAK_CONTRACTION"]), 
+                       (panel_x + 245, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, str(right_arm_analysis.detected_errors["LOOSE_UPPER_ARM"]), 
+                       (panel_x + 335, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, str(left_arm_analysis.detected_errors["PEAK_CONTRACTION"]), 
+                       (panel_x + 425, y_offset), font, font_scale, text_color, thickness)
+            cv2.putText(image, str(left_arm_analysis.detected_errors["LOOSE_UPPER_ARM"]), 
+                       (panel_x + 510, y_offset), font, font_scale, text_color, thickness)
             
-            # Rep counters
-            counter_y = panel_y + 65
-            left_text = str(left_arm_analysis.counter) if left_arm_analysis.is_visible else "UNK"
-            right_text = str(right_arm_analysis.counter) if right_arm_analysis.is_visible else "UNK"
-            cv2.putText(image, f"LEFT: {left_text}", (panel_x + 30, counter_y), font, 0.8, text_color, thickness)
-            cv2.putText(image, f"RIGHT: {right_text}", (panel_x + 220, counter_y), font, 0.8, text_color, thickness)
+            posture_text = f"{'C' if posture == 0 else 'L'} {prediction_probability:.2f}"
+            cv2.putText(image, posture_text, (panel_x + 590, y_offset), font, 0.5, text_color, thickness)
 
-            # PROMINENT WARNING BOXES - Much larger and more visible
-            warning_box_width = 400
-            warning_box_height = 80
-            warning_start_y = panel_y + panel_height + 40
-            
-            # Left arm warnings
-            warning_y = warning_start_y
-            if left_arm_analysis.current_loose_upper_arm:
-                draw_warning_box(image, "LEFT ARM: LOOSE UPPER ARM!", 
-                               50, warning_y, warning_box_width, warning_box_height)
-                warning_y += warning_box_height + 20
-                
-            if left_arm_analysis.current_peak_contraction_error:
-                draw_warning_box(image, "LEFT ARM: POOR CONTRACTION!", 
-                               50, warning_y, warning_box_width, warning_box_height)
-                warning_y += warning_box_height + 20
-
-            # Right arm warnings
-            warning_y = warning_start_y
-            if right_arm_analysis.current_loose_upper_arm:
-                draw_warning_box(image, "RIGHT ARM: LOOSE UPPER ARM!", 
-                               frame_width - warning_box_width - 50, warning_y, 
-                               warning_box_width, warning_box_height)
-                warning_y += warning_box_height + 20
-                
-            if right_arm_analysis.current_peak_contraction_error:
-                draw_warning_box(image, "RIGHT ARM: POOR CONTRACTION!", 
-                               frame_width - warning_box_width - 50, warning_y, 
-                               warning_box_width, warning_box_height)
-
-            # Large warning text at bottom of screen with BLACK background
-            bottom_warning_y = frame_height - 80
-            active_warnings = []
-            
-            if left_arm_analysis.current_loose_upper_arm or right_arm_analysis.current_loose_upper_arm:
-                active_warnings.append("KEEP UPPER ARMS STABLE!")
-            if left_arm_analysis.current_peak_contraction_error or right_arm_analysis.current_peak_contraction_error:
-                active_warnings.append("SQUEEZE HARDER AT THE TOP!")
-                
-            if active_warnings:
-                for i, warning in enumerate(active_warnings):
-                    # Calculate text size for background
-                    font_scale = 1.2
-                    thickness = 3
-                    text_size = cv2.getTextSize(warning, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
-                    
-                    # Draw black background for warning text
-                    text_x = 50
-                    text_y = bottom_warning_y + i * 50
-                    cv2.rectangle(image, (text_x - 10, text_y - text_size[1] - 10), 
-                                (text_x + text_size[0] + 10, text_y + 10), (0, 0, 0), -1)
-                    
-                    # Draw warning text in red
-                    cv2.putText(image, warning, (text_x, text_y), 
-                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), thickness, cv2.LINE_AA)
-
-            # Visualize angles on joints
+            # * Visualize angles
+            # Visualize LEFT arm calculated angles
             if left_arm_analysis.is_visible:
-                angle_color = (0, 0, 255) if left_arm_analysis.current_loose_upper_arm else (0, 255, 255)
-                cv2.putText(image, str(left_bicep_curl_angle), 
-                           tuple(np.multiply(left_arm_analysis.elbow, video_dimensions).astype(int)), 
-                           cv2.FONT_HERSHEY_COMPLEX, 0.6, angle_color, 2, cv2.LINE_AA)
-                cv2.putText(image, str(left_ground_upper_arm_angle), 
-                           tuple(np.multiply(left_arm_analysis.shoulder, video_dimensions).astype(int)), 
-                           cv2.FONT_HERSHEY_COMPLEX, 0.6, angle_color, 2, cv2.LINE_AA)
+                cv2.putText(image, str(left_bicep_curl_angle), tuple(np.multiply(left_arm_analysis.elbow, video_dimensions).astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.putText(image, str(left_ground_upper_arm_angle), tuple(np.multiply(left_arm_analysis.shoulder, video_dimensions).astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
+            # Visualize RIGHT arm calculated angles
             if right_arm_analysis.is_visible:
-                angle_color = (0, 0, 255) if right_arm_analysis.current_loose_upper_arm else (0, 255, 255)
-                cv2.putText(image, str(right_bicep_curl_angle), 
-                           tuple(np.multiply(right_arm_analysis.elbow, video_dimensions).astype(int)), 
-                           cv2.FONT_HERSHEY_COMPLEX, 0.6, angle_color, 2, cv2.LINE_AA)
-                cv2.putText(image, str(right_ground_upper_arm_angle), 
-                           tuple(np.multiply(right_arm_analysis.shoulder, video_dimensions).astype(int)), 
-                           cv2.FONT_HERSHEY_COMPLEX, 0.6, angle_color, 2, cv2.LINE_AA)
+                cv2.putText(image, str(right_bicep_curl_angle), tuple(np.multiply(right_arm_analysis.elbow, video_dimensions).astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
+                cv2.putText(image, str(right_ground_upper_arm_angle), tuple(np.multiply(right_arm_analysis.shoulder, video_dimensions).astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
 
         except Exception as e:
             print(f"Error: {e}")
