@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bicep Exercise Classifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        #video-container {
+            position: relative;
+            margin-bottom: 20px;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #video {
+            width: 100%;
+            display: block;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #results-panel {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .counter-display {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .counter-title {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        .counter-values {
+            display: flex;
+            justify-content: space-around;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+        .warning-panel {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .warning-title {
+            color: #f44336;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .warning-message {
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        button {
+            padding: 12px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #loading {
+            display: none;
+            padding: 10px;
+            background-color: #fffde7;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Bicep Exercise Classifier</h1>
+        
+        <div id="video-container">
+            <video id="video" width="1280" height="720" autoplay muted></video>
+            <canvas id="canvas" width="1280" height="720"></canvas>
+        </div>
+        
+        <div id="results-panel">
+            <div class="counter-display">
+                <div class="counter-title">BICEP CURLS</div>
+                <div class="counter-values">
+                    <div>LEFT: <span id="left-counter">0</span></div>
+                    <div>RIGHT: <span id="right-counter">0</span></div>
+                </div>
+            </div>
+            
+            <div id="warnings-container">
+                <!-- Warnings will be inserted here dynamically -->
+            </div>
+            
+            <div class="status">
+                <p>Status: <span id="status">Loading model...</span></p>
+                <p>Classification: <span id="classification">-</span></p>
+                <p>Confidence: <span id="confidence">-</span></p>
+            </div>
+            
+            <button id="startBtn">Start Classification</button>
+            <div id="loading">Processing frame...</div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let model;
+        let scaler;
+        let isRunning = false;
+        let video;
+        let canvas;
+        let ctx;
+        let pose;
+        
+        // Counters and state
+        let leftCounter = 0;
+        let rightCounter = 0;
+        let leftStage = 'down';
+        let rightStage = 'down';
+        let currentWarnings = [];
+        
+        // Thresholds (adjust these based on your model)
+        const STAGE_UP_THRESHOLD = 90;
+        const STAGE_DOWN_THRESHOLD = 120;
+        const LOOSE_UPPER_ARM_THRESHOLD = 40;
+        const PEAK_CONTRACTION_THRESHOLD = 60;
+        const VISIBILITY_THRESHOLD = 0.65;
+        
+        // DOM elements
+        const startBtn = document.getElementById('startBtn');
+        const statusEl = document.getElementById('status');
+        const leftCounterEl = document.getElementById('left-counter');
+        const rightCounterEl = document.getElementById('right-counter');
+        const classificationEl = document.getElementById('classification');
+        const confidenceEl = document.getElementById('confidence');
+        const warningsContainer = document.getElementById('warnings-container');
+        const loadingEl = document.getElementById('loading');
+
+        // Initialize the application
+        async function init() {
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Initialize MediaPipe Pose
+            pose = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+            
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                smoothSegmentation: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            pose.onResults(onPoseResults);
+            
+            // Load the model and scaler
+            try {
+                statusEl.textContent = "Loading model...";
+                model = await tf.loadLayersModel('model/bicep_classifier/model.json');
+                
+                // Load the scaler (assuming you've saved it as a JSON file)
+                const scalerResponse = await fetch('model/input_scaler.json');
+                const scalerData = await scalerResponse.json();
+                
+                // Create a simple scaler object
+                scaler = {
+                    mean: tf.tensor(scalerData.mean),
+                    std: tf.tensor(scalerData.std)
+                };
+                
+                statusEl.textContent = "Model loaded successfully!";
+                startBtn.disabled = false;
+                
+                console.log("Model and scaler loaded successfully");
+            } catch (error) {
+                console.error("Error loading model:", error);
+                statusEl.textContent = "Error loading model. See console for details.";
+            }
+            
+            // Set up camera
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: 1280, 
+                        height: 720,
+                        facingMode: "user" 
+                    } 
+                })
+                .then(function(stream) {
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(function(error) {
+                    console.error("Camera error:", error);
+                    statusEl.textContent = "Camera access denied. Please enable camera permissions.";
+                });
+            }
+            
+            // Button event listener
+            startBtn.addEventListener('click', toggleClassification);
+        }
+        
+        // Toggle classification on/off
+        function toggleClassification() {
+            isRunning = !isRunning;
+            
+            if (isRunning) {
+                startBtn.textContent = "Stop Classification";
+                statusEl.textContent = "Classifying...";
+                classifyFrame();
+            } else {
+                startBtn.textContent = "Start Classification";
+                statusEl.textContent = "Ready";
+            }
+        }
+        
+        // Process pose results from MediaPipe
+        function onPoseResults(results) {
+            if (!isRunning) return;
+            
+            // Draw landmarks on canvas
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            
+            if (results.poseLandmarks) {
+                // Draw all landmarks
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+                    color: '#00FF00',
+                    lineWidth: 2
+                });
+                drawLandmarks(ctx, results.poseLandmarks, {
+                    color: '#FF0000',
+                    lineWidth: 1,
+                    radius: 2
+                });
+                
+                // Process the landmarks for classification
+                processLandmarks(results.poseLandmarks);
+            } else {
+                // No human detected
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'red';
+                ctx.fillText("NO HUMAN DETECTED", canvas.width/2 - 150, canvas.height/2);
+            }
+            
+            ctx.restore();
+        }
+        
+        // Process landmarks for classification
+        function processLandmarks(landmarks) {
+            loadingEl.style.display = 'block';
+            
+            try {
+                // 1. Extract important landmarks (same as your Python code)
+                const importantLandmarks = [
+                    "NOSE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "RIGHT_ELBOW", 
+                    "LEFT_ELBOW", "RIGHT_WRIST", "LEFT_WRIST", "LEFT_HIP", "RIGHT_HIP"
+                ];
+                
+                const landmarkData = {};
+                importantLandmarks.forEach(lm => {
+                    const landmark = landmarks[POSE_LANDMARKS[lm]];
+                    const key = lm.toLowerCase();
+                    landmarkData[`${key}_x`] = landmark.x;
+                    landmarkData[`${key}_y`] = landmark.y;
+                    landmarkData[`${key}_z`] = landmark.z;
+                    landmarkData[`${key}_v`] = landmark.visibility;
+                });
+                
+                // 2. Preprocess the landmarks for the model
+                const inputData = preprocessLandmarks(landmarkData);
+                
+                // 3. Make prediction
+                const prediction = model.predict(inputData);
+                const predictionData = prediction.dataSync();
+                
+                // 4. Interpret results (0 = Correct, 1 = Low form)
+                const confidence = Math.max(predictionData[0], predictionData[1]);
+                const predictedClass = predictionData[0] > predictionData[1] ? 0 : 1;
+                
+                // 5. Update UI with classification results
+                updateClassificationResults(predictedClass, confidence);
+                
+                // 6. Analyze bicep curls for counting and form feedback
+                analyzeBicepCurls(landmarks, predictedClass);
+                
+                // 7. Clean up
+                tf.dispose([prediction, inputData]);
+                
+            } catch (error) {
+                console.error("Processing error:", error);
+            } finally {
+                loadingEl.style.display = 'none';
+            }
+        }
+        
+        // Preprocess landmarks to match model input format
+        function preprocessLandmarks(landmarks) {
+            // Convert landmarks object to array in the correct order
+            const orderedFeatures = [];
+            
+            // The order should match how you trained the model
+            const BICEP_LANDMARKS = [
+                "NOSE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "RIGHT_ELBOW", 
+                "LEFT_ELBOW", "RIGHT_WRIST", "LEFT_WRIST", "LEFT_HIP", "RIGHT_HIP"
+            ];
+            
+            BICEP_LANDMARKS.forEach(landmark => {
+                const key = landmark.toLowerCase();
+                orderedFeatures.push(
+                    landmarks[`${key}_x`],
+                    landmarks[`${key}_y`],
+                    landmarks[`${key}_z`],
+                    landmarks[`${key}_v`]
+                );
+            });
+            
+            // Convert to tensor and normalize using the scaler
+            const featuresTensor = tf.tensor2d([orderedFeatures]);
+            const normalizedFeatures = featuresTensor.sub(scaler.mean).div(scaler.std);
+            
+            return normalizedFeatures;
+        }
+        
+        // Update the UI with classification results
+        function updateClassificationResults(predictedClass, confidence) {
+            const confidencePercent = (confidence * 100).toFixed(1);
+            
+            if (predictedClass === 0) {
+                classificationEl.textContent = "Correct Form";
+                classificationEl.style.color = "green";
+            } else {
+                classificationEl.textContent = "Low Form";
+                classificationEl.style.color = "red";
+            }
+            
+            confidenceEl.textContent = `${confidencePercent}%`;
+        }
+        
+        // Analyze bicep curls for counting and form feedback
+        function analyzeBicepCurls(landmarks, predictedClass) {
+            currentWarnings = [];
+            
+            // Analyze left arm
+            const leftAnalysis = analyzeArm(landmarks, 'LEFT', predictedClass);
+            if (leftAnalysis) {
+                leftCounter = leftAnalysis.counter;
+                leftCounterEl.textContent = leftCounter;
+                if (leftAnalysis.warnings.length > 0) {
+                    currentWarnings.push(...leftAnalysis.warnings.map(w => `LEFT ARM: ${w}`));
+                }
+            }
+            
+            // Analyze right arm
+            const rightAnalysis = analyzeArm(landmarks, 'RIGHT', predictedClass);
+            if (rightAnalysis) {
+                rightCounter = rightAnalysis.counter;
+                rightCounterEl.textContent = rightCounter;
+                if (rightAnalysis.warnings.length > 0) {
+                    currentWarnings.push(...rightAnalysis.warnings.map(w => `RIGHT ARM: ${w}`));
+                }
+            }
+            
+            // Update warnings display
+            updateWarningsDisplay();
+        }
+        
+        // Analyze a single arm (left or right)
+        function analyzeArm(landmarks, side, predictedClass) {
+            const shoulder = landmarks[POSE_LANDMARKS[`${side}_SHOULDER`]];
+            const elbow = landmarks[POSE_LANDMARKS[`${side}_ELBOW`]];
+            const wrist = landmarks[POSE_LANDMARKS[`${side}_WRIST`]];
+            
+            // Check visibility
+            if (shoulder.visibility < VISIBILITY_THRESHOLD || 
+                elbow.visibility < VISIBILITY_THRESHOLD || 
+                wrist.visibility < VISIBILITY_THRESHOLD) {
+                return null;
+            }
+            
+            // Calculate angles
+            const curlAngle = calculateAngle(
+                [shoulder.x, shoulder.y],
+                [elbow.x, elbow.y],
+                [wrist.x, wrist.y]
+            );
+            
+            const upperArmAngle = calculateAngle(
+                [elbow.x, elbow.y],
+                [shoulder.x, shoulder.y],
+                [shoulder.x, 1] // Projection point for vertical reference
+            );
+            
+            // Update counter
+            let counter = (side === 'LEFT') ? leftCounter : rightCounter;
+            let stage = (side === 'LEFT') ? leftStage : rightStage;
+            
+            if (curlAngle > STAGE_DOWN_THRESHOLD) {
+                stage = 'down';
+            } else if (curlAngle < STAGE_UP_THRESHOLD && stage === 'down') {
+                stage = 'up';
+                counter++;
+            }
+            
+            // Update stage
+            if (side === 'LEFT') {
+                leftStage = stage;
+            } else {
+                rightStage = stage;
+            }
+            
+            // Check for form issues
+            const warnings = [];
+            
+            // Loose upper arm
+            if (upperArmAngle > LOOSE_UPPER_ARM_THRESHOLD) {
+                warnings.push("LOOSE UPPER ARM");
+            }
+            
+            // Poor contraction (only if model predicts low form)
+            if (predictedClass === 1 && stage === 'up' && curlAngle > PEAK_CONTRACTION_THRESHOLD) {
+                warnings.push("POOR CONTRACTION");
+            }
+            
+            return {
+                counter,
+                warnings
+            };
+        }
+        
+        // Update warnings display
+        function updateWarningsDisplay() {
+            warningsContainer.innerHTML = '';
+            
+            if (currentWarnings.length === 0) {
+                const noWarning = document.createElement('div');
+                noWarning.className = 'status';
+                noWarning.textContent = "Good form! Keep it up!";
+                warningsContainer.appendChild(noWarning);
+                return;
+            }
+            
+            currentWarnings.forEach(warning => {
+                const warningDiv = document.createElement('div');
+                warningDiv.className = 'warning-panel';
+                
+                const title = document.createElement('div');
+                title.className = 'warning-title';
+                title.textContent = 'WARNING';
+                
+                const message = document.createElement('div');
+                message.className = 'warning-message';
+                message.textContent = warning;
+                
+                warningDiv.appendChild(title);
+                warningDiv.appendChild(message);
+                warningsContainer.appendChild(warningDiv);
+            });
+        }
+        
+        // Calculate angle between 3 points
+        function calculateAngle(point1, point2, point3) {
+            // Calculate vectors
+            const vector1 = [point1[0] - point2[0], point1[1] - point2[1]];
+            const vector2 = [point3[0] - point2[0], point3[1] - point2[1]];
+            
+            // Calculate dot product and magnitudes
+            const dotProduct = vector1[0] * vector2[0] + vector1[1] * vector2[1];
+            const magnitude1 = Math.sqrt(vector1[0] ** 2 + vector1[1] ** 2);
+            const magnitude2 = Math.sqrt(vector2[0] ** 2 + vector2[1] ** 2);
+            
+            // Calculate angle in radians and convert to degrees
+            const angleRad = Math.acos(dotProduct / (magnitude1 * magnitude2));
+            let angleDeg = angleRad * (180 / Math.PI);
+            
+            // Ensure angle is between 0 and 180
+            angleDeg = angleDeg > 180 ? 360 - angleDeg : angleDeg;
+            
+            return angleDeg;
+        }
+        
+        // Main classification loop
+        async function classifyFrame() {
+            if (!isRunning) return;
+            
+            try {
+                // Send video frame to MediaPipe for pose detection
+                await pose.send({ image: video });
+            } catch (error) {
+                console.error("Classification error:", error);
+            }
+            
+            // Continue the loop
+            if (isRunning) {
+                requestAnimationFrame(classifyFrame);
+            }
+        }
+        
+        // Initialize when page loads
+        window.onload = init;
+    </script>
+</body>
+</html>

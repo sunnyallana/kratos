@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunge Exercise Classifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        #video-container {
+            position: relative;
+            margin-bottom: 20px;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #video {
+            width: 100%;
+            display: block;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #results-panel {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .counter-display {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .counter-title {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        .counter-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+        .warning-panel {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .warning-title {
+            color: #f44336;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .warning-message {
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        button {
+            padding: 12px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #loading {
+            display: none;
+            padding: 10px;
+            background-color: #fffde7;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .form-feedback {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .form-indicator {
+            width: 48%;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .good-form {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .bad-form {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .stage-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        .stage-box {
+            width: 30%;
+            padding: 10px;
+            text-align: center;
+            border-radius: 4px;
+            background-color: #e3f2fd;
+            color: #0d47a1;
+        }
+        .stage-box.active {
+            background-color: #bbdefb;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Lunge Exercise Classifier</h1>
+        
+        <div id="video-container">
+            <video id="video" width="1280" height="720" autoplay muted></video>
+            <canvas id="canvas" width="1280" height="720"></canvas>
+        </div>
+        
+        <div id="results-panel">
+            <div class="counter-display">
+                <div class="counter-title">LUNGE COUNTER</div>
+                <div class="counter-value"><span id="lunge-counter">0</span></div>
+            </div>
+            
+            <div class="stage-indicator">
+                <div id="init-stage" class="stage-box">INITIAL</div>
+                <div id="mid-stage" class="stage-box">MID</div>
+                <div id="down-stage" class="stage-box">DOWN</div>
+            </div>
+            
+            <div class="form-feedback">
+                <div id="knee-form" class="form-indicator good-form">KNEE: GOOD</div>
+                <div id="back-form" class="form-indicator good-form">BACK: GOOD</div>
+            </div>
+            
+            <div id="warnings-container">
+                <!-- Warnings will be inserted here dynamically -->
+            </div>
+            
+            <div class="status">
+                <p>Status: <span id="status">Loading model...</span></p>
+                <p>Error Detection: <span id="error-detection">-</span></p>
+                <p>Confidence: <span id="confidence">-</span></p>
+            </div>
+            
+            <button id="startBtn">Start Classification</button>
+            <div id="loading">Processing frame...</div>
+        </div>
+    </div>
+
+    <script>
+    // Global variables
+    let stageModel;
+    let errModel;
+    let scaler;
+    let isRunning = false;
+    let video;
+    let canvas;
+    let ctx;
+    let pose;
+    
+    // Counters and state
+    let lungeCounter = 0;
+    let currentStage = 'init'; // 'init', 'mid', or 'down'
+    let currentError = null;
+    let currentWarnings = [];
+    
+    // Thresholds (adjust these based on your model)
+    const KNEE_ANGLE_THRESHOLD = [60, 125];
+    const BACK_ANGLE_THRESHOLD = 20;  // Max back angle from vertical
+    const VISIBILITY_THRESHOLD = 0.65;
+    const PREDICTION_PROB_THRESHOLD = 0.8;
+    
+    // DOM elements
+    const startBtn = document.getElementById('startBtn');
+    const statusEl = document.getElementById('status');
+    const lungeCounterEl = document.getElementById('lunge-counter');
+    const errorDetectionEl = document.getElementById('error-detection');
+    const confidenceEl = document.getElementById('confidence');
+    const warningsContainer = document.getElementById('warnings-container');
+    const loadingEl = document.getElementById('loading');
+    const kneeFormEl = document.getElementById('knee-form');
+    const backFormEl = document.getElementById('back-form');
+    const initStageEl = document.getElementById('init-stage');
+    const midStageEl = document.getElementById('mid-stage');
+    const downStageEl = document.getElementById('down-stage');
+
+    // Initialize the application
+    async function init() {
+        video = document.getElementById('video');
+        canvas = document.getElementById('canvas');
+        ctx = canvas.getContext('2d');
+        
+        // Initialize MediaPipe Pose
+        pose = new Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }
+        });
+        
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            smoothSegmentation: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        
+        pose.onResults(onPoseResults);
+        
+        // Load the models and scaler
+        try {
+            statusEl.textContent = "Loading models...";
+            
+            // Load stage model
+            stageModel = await tf.loadLayersModel('saved_models/lunge_stage_model/model.json');
+            
+            // Load error model
+            errModel = await tf.loadLayersModel('saved_models/lunge_error_model/model.json');
+            
+            // Load the scaler metadata (assuming same scaler for both)
+            const scalerResponse = await fetch('saved_models/lunge_stage_model_metadata.json');
+            const scalerData = await scalerResponse.json();
+            
+            // Create a scaler object
+            scaler = {
+                mean: tf.tensor(scalerData.scaler.mean),
+                std: tf.tensor(scalerData.scaler.std)
+            };
+            
+            statusEl.textContent = "Models loaded successfully!";
+            startBtn.disabled = false;
+            
+            console.log("Models and scaler loaded successfully");
+        } catch (error) {
+            console.error("Error loading models:", error);
+            statusEl.textContent = "Error loading models. See console for details.";
+        }
+        
+        // Set up camera
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: "user" 
+                    } 
+                });
+                
+                video.srcObject = stream;
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
+                });
+                
+                // Set canvas dimensions to match video
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                // Start with classification paused
+                statusEl.textContent = "Ready";
+            } catch (error) {
+                console.error("Camera error:", error);
+                statusEl.textContent = "Camera access denied. Please enable camera permissions.";
+            }
+        }
+        
+        // Button event listener
+        startBtn.addEventListener('click', toggleClassification);
+    }
+    
+    // Toggle classification on/off
+    function toggleClassification() {
+        isRunning = !isRunning;
+        
+        if (isRunning) {
+            startBtn.textContent = "Stop Classification";
+            statusEl.textContent = "Classifying...";
+            classifyFrame();
+        } else {
+            startBtn.textContent = "Start Classification";
+            statusEl.textContent = "Ready";
+        }
+    }
+    
+    // Process pose results from MediaPipe
+    function onPoseResults(results) {
+        if (!isRunning) return;
+        
+        // Draw landmarks on canvas
+        ctx.save();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the video frame first
+        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+        
+        if (results.poseLandmarks) {
+            try {
+                // Draw all landmarks
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+                    color: currentError ? '#FF0000' : '#00FF00',
+                    lineWidth: 2
+                });
+                drawLandmarks(ctx, results.poseLandmarks, {
+                    color: currentError ? '#FF0000' : '#00FF00',
+                    lineWidth: 1,
+                    radius: 2
+                });
+                
+                // Process the landmarks for classification
+                processLandmarks(results.poseLandmarks);
+            } catch (error) {
+                console.error("Error drawing landmarks:", error);
+            }
+        } else {
+            // No human detected
+            ctx.font = '24px Arial';
+            ctx.fillStyle = 'red';
+            ctx.fillText("NO HUMAN DETECTED", canvas.width/2 - 150, canvas.height/2);
+        }
+        
+        ctx.restore();
+    }
+    
+    // Process landmarks for classification
+    async function processLandmarks(landmarks) {
+        loadingEl.style.display = 'block';
+        
+        try {
+            // 1. Extract important landmarks
+            const importantLandmarks = [
+                "NOSE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_HIP",
+                "RIGHT_HIP", "LEFT_KNEE", "RIGHT_KNEE", "LEFT_ANKLE", "RIGHT_ANKLE",
+                "LEFT_HEEL", "RIGHT_HEEL", "LEFT_FOOT_INDEX", "RIGHT_FOOT_INDEX"
+            ];
+            
+            const landmarkData = {};
+            importantLandmarks.forEach(lm => {
+                const landmark = landmarks[POSE_LANDMARKS[lm]];
+                if (!landmark) {
+                    throw new Error(`Landmark ${lm} not found`);
+                }
+                const key = lm.toLowerCase();
+                landmarkData[`${key}_x`] = landmark.x;
+                landmarkData[`${key}_y`] = landmark.y;
+                landmarkData[`${key}_z`] = landmark.z;
+                landmarkData[`${key}_v`] = landmark.visibility;
+            });
+            
+            // 2. Preprocess the landmarks for the model
+            const inputData = preprocessLandmarks(landmarkData);
+            
+            // 3. Make stage prediction
+            const stagePrediction = stageModel.predict(inputData);
+            const stageProbabilities = stagePrediction.arraySync()[0];
+            const stageConfidence = Math.max(...stageProbabilities);
+            const predictedStage = stageProbabilities.indexOf(Math.max(...stageProbabilities));
+            
+            // Only update stage if confidence is high enough
+            if (stageConfidence >= PREDICTION_PROB_THRESHOLD) {
+                const newStage = ['init', 'mid', 'down'][predictedStage];
+                
+                // Update counter when transitioning from down to init
+                if (newStage === 'init' && currentStage === 'down') {
+                    lungeCounter++;
+                    lungeCounterEl.textContent = lungeCounter;
+                }
+                
+                currentStage = newStage;
+                updateStageDisplay();
+            }
+            
+            // 4. Make error prediction (only in down stage)
+            if (currentStage === 'down') {
+                const errPrediction = errModel.predict(inputData);
+                const errProbabilities = errPrediction.arraySync()[0];
+                const errConfidence = Math.max(...errProbabilities);
+                const predictedError = errProbabilities.indexOf(Math.max(...errProbabilities));
+                
+                if (errConfidence >= PREDICTION_PROB_THRESHOLD) {
+                    currentError = ['correct', 'knee_collapse', 'back_bend', 'shallow'][predictedError];
+                } else {
+                    currentError = null;
+                }
+            } else {
+                currentError = null;
+            }
+            
+            // 5. Update UI with results
+            updateDetectionResults(stageConfidence);
+            
+            // 6. Analyze form for feedback
+            analyzeForm(landmarks);
+            
+            // 7. Clean up
+            tf.dispose([stagePrediction, inputData]);
+            if (currentStage === 'down') {
+                tf.dispose([errPrediction]);
+            }
+            
+        } catch (error) {
+            console.error("Processing error:", error);
+        } finally {
+            loadingEl.style.display = 'none';
+        }
+    }
+    
+    // Preprocess landmarks to match model input format
+    function preprocessLandmarks(landmarks) {
+        // Convert landmarks object to array in the correct order
+        const orderedFeatures = [];
+        
+        // The order should match how you trained the model
+        const LUNGE_LANDMARKS = [
+            "NOSE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_HIP",
+            "RIGHT_HIP", "LEFT_KNEE", "RIGHT_KNEE", "LEFT_ANKLE", "RIGHT_ANKLE",
+            "LEFT_HEEL", "RIGHT_HEEL", "LEFT_FOOT_INDEX", "RIGHT_FOOT_INDEX"
+        ];
+        
+        LUNGE_LANDMARKS.forEach(landmark => {
+            const key = landmark.toLowerCase();
+            orderedFeatures.push(
+                landmarks[`${key}_x`],
+                landmarks[`${key}_y`],
+                landmarks[`${key}_z`],
+                landmarks[`${key}_v`]
+            );
+        });
+        
+        // Convert to tensor and normalize using the scaler
+        const featuresTensor = tf.tensor2d([orderedFeatures]);
+        const normalizedFeatures = featuresTensor.sub(scaler.mean).div(scaler.std);
+        
+        return normalizedFeatures;
+    }
+    
+    // Update the stage display
+    function updateStageDisplay() {
+        // Reset all stage indicators
+        initStageEl.classList.remove('active');
+        midStageEl.classList.remove('active');
+        downStageEl.classList.remove('active');
+        
+        // Activate the current stage
+        if (currentStage === 'init') {
+            initStageEl.classList.add('active');
+        } else if (currentStage === 'mid') {
+            midStageEl.classList.add('active');
+        } else if (currentStage === 'down') {
+            downStageEl.classList.add('active');
+        }
+    }
+    
+    // Update the UI with detection results
+    function updateDetectionResults(confidence) {
+        const confidencePercent = (confidence * 100).toFixed(1);
+        confidenceEl.textContent = `${confidencePercent}%`;
+        
+        if (currentError) {
+            errorDetectionEl.textContent = currentError.toUpperCase();
+            errorDetectionEl.style.color = "red";
+        } else {
+            errorDetectionEl.textContent = "CORRECT";
+            errorDetectionEl.style.color = "green";
+        }
+    }
+    
+    // Analyze lunge form for feedback
+    function analyzeForm(landmarks) {
+        currentWarnings = [];
+        
+        try {
+            // Get relevant landmarks
+            const leftHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
+            const rightHip = landmarks[POSE_LANDMARKS.RIGHT_HIP];
+            const leftKnee = landmarks[POSE_LANDMARKS.LEFT_KNEE];
+            const rightKnee = landmarks[POSE_LANDMARKS.RIGHT_KNEE];
+            const leftAnkle = landmarks[POSE_LANDMARKS.LEFT_ANKLE];
+            const rightAnkle = landmarks[POSE_LANDMARKS.RIGHT_ANKLE];
+            const leftShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
+            const rightShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
+            
+            // Check visibility
+            if (leftHip.visibility < VISIBILITY_THRESHOLD || 
+                rightHip.visibility < VISIBILITY_THRESHOLD || 
+                leftKnee.visibility < VISIBILITY_THRESHOLD || 
+                rightKnee.visibility < VISIBILITY_THRESHOLD) {
+                return;
+            }
+            
+            // Calculate knee angles
+            const leftKneeAngle = calculateAngle(
+                [leftHip.x, leftHip.y],
+                [leftKnee.x, leftKnee.y],
+                [leftAnkle.x, leftAnkle.y]
+            );
+            
+            const rightKneeAngle = calculateAngle(
+                [rightHip.x, rightHip.y],
+                [rightKnee.x, rightKnee.y],
+                [rightAnkle.x, rightAnkle.y]
+            );
+            
+            // Calculate back angle (shoulder to hip angle from vertical)
+            const backAngle = calculateAngle(
+                [leftShoulder.x, leftShoulder.y],
+                [leftHip.x, leftHip.y],
+                [leftHip.x, 0] // Vertical reference
+            );
+            
+            // Check for knee collapse (poor form)
+            if (leftKneeAngle < KNEE_ANGLE_THRESHOLD[0] || rightKneeAngle < KNEE_ANGLE_THRESHOLD[0]) {
+                currentWarnings.push("KNEE ANGLE TOO SHALLOW");
+                kneeFormEl.textContent = "KNEE: POOR";
+                kneeFormEl.className = "form-indicator bad-form";
+            } else if (leftKneeAngle > KNEE_ANGLE_THRESHOLD[1] || rightKneeAngle > KNEE_ANGLE_THRESHOLD[1]) {
+                currentWarnings.push("KNEE ANGLE TOO DEEP");
+                kneeFormEl.textContent = "KNEE: POOR";
+                kneeFormEl.className = "form-indicator bad-form";
+            } else {
+                kneeFormEl.textContent = "KNEE: GOOD";
+                kneeFormEl.className = "form-indicator good-form";
+            }
+            
+            // Check for back angle (poor form)
+            if (backAngle > BACK_ANGLE_THRESHOLD) {
+                currentWarnings.push("BACK NOT STRAIGHT");
+                backFormEl.textContent = "BACK: POOR";
+                backFormEl.className = "form-indicator bad-form";
+            } else {
+                backFormEl.textContent = "BACK: GOOD";
+                backFormEl.className = "form-indicator good-form";
+            }
+            
+            // Update warnings display
+            updateWarningsDisplay();
+        } catch (error) {
+            console.error("Error analyzing form:", error);
+        }
+    }
+    
+    // Update warnings display
+    function updateWarningsDisplay() {
+        warningsContainer.innerHTML = '';
+        
+        if (currentWarnings.length === 0 && !currentError) {
+            const noWarning = document.createElement('div');
+            noWarning.className = 'status';
+            noWarning.textContent = "Good form! Keep it up!";
+            warningsContainer.appendChild(noWarning);
+            return;
+        }
+        
+        // Add error detection warning if present
+        if (currentError && currentError !== 'correct') {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'warning-panel';
+            
+            const title = document.createElement('div');
+            title.className = 'warning-title';
+            title.textContent = 'ERROR DETECTED';
+            
+            const message = document.createElement('div');
+            message.className = 'warning-message';
+            message.textContent = currentError.toUpperCase().replace('_', ' ');
+            
+            warningDiv.appendChild(title);
+            warningDiv.appendChild(message);
+            warningsContainer.appendChild(warningDiv);
+        }
+        
+        // Add form warnings
+        currentWarnings.forEach(warning => {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'warning-panel';
+            
+            const title = document.createElement('div');
+            title.className = 'warning-title';
+            title.textContent = 'FORM WARNING';
+            
+            const message = document.createElement('div');
+            message.className = 'warning-message';
+            message.textContent = warning;
+            
+            warningDiv.appendChild(title);
+            warningDiv.appendChild(message);
+            warningsContainer.appendChild(warningDiv);
+        });
+    }
+    
+    // Calculate angle between 3 points
+    function calculateAngle(point1, point2, point3) {
+        // Calculate vectors
+        const vector1 = [point1[0] - point2[0], point1[1] - point2[1]];
+        const vector2 = [point3[0] - point2[0], point3[1] - point2[1]];
+        
+        // Calculate dot product and magnitudes
+        const dotProduct = vector1[0] * vector2[0] + vector1[1] * vector2[1];
+        const magnitude1 = Math.sqrt(vector1[0] ** 2 + vector1[1] ** 2);
+        const magnitude2 = Math.sqrt(vector2[0] ** 2 + vector2[1] ** 2);
+        
+        // Calculate angle in radians and convert to degrees
+        const angleRad = Math.acos(dotProduct / (magnitude1 * magnitude2));
+        let angleDeg = angleRad * (180 / Math.PI);
+        
+        // Ensure angle is between 0 and 180
+        angleDeg = angleDeg > 180 ? 360 - angleDeg : angleDeg;
+        
+        return angleDeg;
+    }
+    
+    // Main classification loop
+    async function classifyFrame() {
+        if (!isRunning) return;
+        
+        try {
+            // Ensure video is ready
+            if (video.readyState >= video.HAVE_ENOUGH_DATA) {
+                // Send video frame to MediaPipe for pose detection
+                await pose.send({ image: video });
+            }
+        } catch (error) {
+            console.error("Classification error:", error);
+            // Try to recover by restarting the classification
+            if (isRunning) {
+                setTimeout(classifyFrame, 100);
+                return;
+            }
+        }
+        
+        // Continue the loop
+        if (isRunning) {
+            requestAnimationFrame(classifyFrame);
+        }
+    }
+    
+    // Initialize when page loads
+    window.onload = init;
+    </script>
+</body>
+</html>

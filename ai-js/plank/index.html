@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plank Exercise Classifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        #video-container {
+            position: relative;
+            width: 100%;
+            background-color: black;
+        }
+        
+        #video {
+            width: 100%;
+            display: block;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #control-panel {
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #eee;
+        }
+        
+        .status-panel {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .status-title {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .status-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .correct {
+            color: #4CAF50;
+        }
+        
+        .incorrect {
+            color: #F44336;
+        }
+        
+        .unknown {
+            color: #FFC107;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #loading {
+            display: none;
+            padding: 10px;
+            background-color: #fffde7;
+            border-radius: 4px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        
+        .feedback-panel {
+            background-color: #e8f5e9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        .feedback-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .warning {
+            color: #F44336;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1 style="text-align: center; padding: 20px; margin: 0;">Plank Exercise Classifier</h1>
+        
+        <div id="video-container">
+            <video id="video" width="1280" height="720" autoplay muted></video>
+            <canvas id="canvas" width="1280" height="720"></canvas>
+        </div>
+        
+        <div id="control-panel">
+            <div class="status-panel">
+                <div class="status-title">PLANK FORM</div>
+                <div id="status-value" class="status-value unknown">WAITING FOR INPUT</div>
+                <div id="confidence" class="status-value">Confidence: 0%</div>
+            </div>
+            
+            <div>
+                <button id="startBtn">Start Classification</button>
+            </div>
+            
+            <div id="loading">Processing frame...</div>
+            
+            <div class="feedback-panel">
+                <div class="feedback-title">FORM FEEDBACK:</div>
+                <div id="feedback"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let model;
+        let scaler;
+        let isRunning = false;
+        let video;
+        let canvas;
+        let ctx;
+        let pose;
+        
+        // DOM elements
+        const startBtn = document.getElementById('startBtn');
+        const statusValueEl = document.getElementById('status-value');
+        const confidenceEl = document.getElementById('confidence');
+        const feedbackEl = document.getElementById('feedback');
+        const loadingEl = document.getElementById('loading');
+
+        // Initialize the application
+        async function init() {
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Initialize MediaPipe Pose
+            pose = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+            
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                smoothSegmentation: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            pose.onResults(onPoseResults);
+            
+            // Load the model and scaler
+            try {
+                loadingEl.style.display = 'block';
+                loadingEl.textContent = "Loading model...";
+                
+                // Load your plank model (adjust path as needed)
+                model = await tf.loadLayersModel('model/plank_7layer_dropout/model.json');
+                
+                // Load the scaler (assuming you've saved it as a JSON file)
+                const scalerResponse = await fetch('model/input_scaler.json');
+                const scalerData = await scalerResponse.json();
+                
+                // Create a simple scaler object
+                scaler = {
+                    mean: tf.tensor(scalerData.mean),
+                    std: tf.tensor(scalerData.std)
+                };
+                
+                loadingEl.style.display = 'none';
+                startBtn.disabled = false;
+                
+                console.log("Model and scaler loaded successfully");
+            } catch (error) {
+                console.error("Error loading model:", error);
+                loadingEl.style.display = 'block';
+                loadingEl.textContent = "Error loading model. See console for details.";
+                statusValueEl.textContent = "MODEL LOAD ERROR";
+                feedbackEl.innerHTML = "Could not load the classification model. Check console for details.";
+            }
+            
+            // Set up camera
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: 1280, 
+                        height: 720,
+                        facingMode: "user" 
+                    } 
+                })
+                .then(function(stream) {
+                    video.srcObject = stream;
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        // Start processing frames
+                        requestAnimationFrame(processFrame);
+                    };
+                })
+                .catch(function(error) {
+                    console.error("Camera error:", error);
+                    loadingEl.style.display = 'block';
+                    loadingEl.textContent = "Camera access denied. Please enable camera permissions.";
+                    statusValueEl.textContent = "CAMERA ERROR";
+                    feedbackEl.innerHTML = "Could not access camera. Please enable permissions.";
+                });
+            }
+            
+            // Button event listeners
+            startBtn.addEventListener('click', toggleClassification);
+        }
+        
+        // Process each video frame
+        async function processFrame() {
+            if (isRunning) {
+                await pose.send({image: video});
+            }
+            requestAnimationFrame(processFrame);
+        }
+        
+        // Toggle classification on/off
+        function toggleClassification() {
+            isRunning = !isRunning;
+            
+            if (isRunning) {
+                startBtn.textContent = "Stop Classification";
+                statusValueEl.textContent = "PROCESSING...";
+                statusValueEl.className = "status-value unknown";
+            } else {
+                startBtn.textContent = "Start Classification";
+                statusValueEl.textContent = "PAUSED";
+                statusValueEl.className = "status-value unknown";
+            }
+        }
+        
+        // Process pose results from MediaPipe
+        function onPoseResults(results) {
+            // Draw landmarks on canvas
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            
+            if (results.poseLandmarks) {
+                // Draw all landmarks
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+                    color: '#00FF00',
+                    lineWidth: 2
+                });
+                drawLandmarks(ctx, results.poseLandmarks, {
+                    color: '#FF0000',
+                    lineWidth: 1,
+                    radius: 2
+                });
+                
+                if (isRunning && model) {
+                    // Process the landmarks for classification
+                    processLandmarks(results.poseLandmarks);
+                }
+            } else {
+                // No human detected
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'red';
+                ctx.fillText("NO HUMAN DETECTED", canvas.width/2 - 150, canvas.height/2);
+                
+                // Update UI
+                statusValueEl.textContent = "NO HUMAN DETECTED";
+                statusValueEl.className = "status-value unknown";
+                confidenceEl.textContent = "Confidence: 0%";
+                feedbackEl.innerHTML = "Please position yourself in the camera view";
+            }
+            
+            ctx.restore();
+        }
+        
+        // Process landmarks for classification
+        function processLandmarks(landmarks) {
+            loadingEl.style.display = 'block';
+            
+            try {
+                // 1. Extract important landmarks for plank
+                const importantLandmarks = [
+                    "NOSE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_ELBOW", 
+                    "RIGHT_ELBOW", "LEFT_WRIST", "RIGHT_WRIST", "LEFT_HIP", 
+                    "RIGHT_HIP", "LEFT_KNEE", "RIGHT_KNEE", "LEFT_ANKLE", 
+                    "RIGHT_ANKLE", "LEFT_HEEL", "RIGHT_HEEL", "LEFT_FOOT_INDEX", 
+                    "RIGHT_FOOT_INDEX"
+                ];
+                
+                const landmarkData = {};
+                importantLandmarks.forEach(lm => {
+                    const landmark = landmarks[POSE_LANDMARKS[lm]];
+                    const key = lm.toLowerCase();
+                    landmarkData[`${key}_x`] = landmark.x;
+                    landmarkData[`${key}_y`] = landmark.y;
+                    landmarkData[`${key}_z`] = landmark.z;
+                    landmarkData[`${key}_v`] = landmark.visibility;
+                });
+                
+                // 2. Preprocess the landmarks for the model
+                const inputData = preprocessLandmarks(landmarkData);
+                
+                // 3. Make prediction
+                const prediction = model.predict(inputData);
+                const predictionData = prediction.dataSync();
+                
+                // 4. Interpret results (0 = Correct, 1 = High back, 2 = Low back)
+                const maxProbability = Math.max(...predictionData);
+                const predictedClass = predictionData.indexOf(maxProbability);
+                const confidence = (maxProbability * 100).toFixed(1);
+                
+                // 5. Update UI with classification results
+                updateClassificationResults(predictedClass, confidence);
+                
+                // 6. Provide form feedback
+                provideFormFeedback(predictedClass, landmarks);
+                
+                // 7. Clean up
+                tf.dispose([prediction, inputData]);
+                
+            } catch (error) {
+                console.error("Processing error:", error);
+                statusValueEl.textContent = "PROCESSING ERROR";
+                statusValueEl.className = "status-value unknown";
+                confidenceEl.textContent = "Confidence: 0%";
+                feedbackEl.innerHTML = "An error occurred during processing";
+            } finally {
+                loadingEl.style.display = 'none';
+            }
+        }
+        
+        // Preprocess landmarks to match model input format
+        function preprocessLandmarks(landmarks) {
+            // Convert landmarks object to array in the correct order
+            const orderedFeatures = [];
+            
+            // The order should match how you trained the model
+            const PLANK_LANDMARKS = [
+                "NOSE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_ELBOW", 
+                "RIGHT_ELBOW", "LEFT_WRIST", "RIGHT_WRIST", "LEFT_HIP", 
+                "RIGHT_HIP", "LEFT_KNEE", "RIGHT_KNEE", "LEFT_ANKLE", 
+                "RIGHT_ANKLE", "LEFT_HEEL", "RIGHT_HEEL", "LEFT_FOOT_INDEX", 
+                "RIGHT_FOOT_INDEX"
+            ];
+            
+            PLANK_LANDMARKS.forEach(landmark => {
+                const key = landmark.toLowerCase();
+                orderedFeatures.push(
+                    landmarks[`${key}_x`],
+                    landmarks[`${key}_y`],
+                    landmarks[`${key}_z`],
+                    landmarks[`${key}_v`]
+                );
+            });
+            
+            // Convert to tensor and normalize using the scaler
+            const featuresTensor = tf.tensor2d([orderedFeatures]);
+            const normalizedFeatures = featuresTensor.sub(scaler.mean).div(scaler.std);
+            
+            return normalizedFeatures;
+        }
+        
+        // Update the UI with classification results
+        function updateClassificationResults(predictedClass, confidence) {
+            confidenceEl.textContent = `Confidence: ${confidence}%`;
+            
+            switch(predictedClass) {
+                case 0: // Correct plank form
+                    statusValueEl.textContent = "CORRECT PLANK FORM";
+                    statusValueEl.className = "status-value correct";
+                    break;
+                case 1: // High back detected
+                    statusValueEl.textContent = "HIGH BACK DETECTED";
+                    statusValueEl.className = "status-value incorrect";
+                    break;
+                case 2: // Low back detected
+                    statusValueEl.textContent = "LOW BACK DETECTED";
+                    statusValueEl.className = "status-value incorrect";
+                    break;
+                default:
+                    statusValueEl.textContent = "UNKNOWN POSE";
+                    statusValueEl.className = "status-value unknown";
+            }
+        }
+        
+        // Provide form feedback based on the classification
+        function provideFormFeedback(predictedClass, landmarks) {
+            let feedback = "";
+            
+            if (predictedClass === 0) {
+                feedback = "<p>Great form! Keep it up!</p>";
+            } else {
+                feedback = "<p class='warning'>Form issues detected:</p>";
+                
+                if (predictedClass === 1) {
+                    feedback += "<p>- Your hips are too high (butt up in the air)</p>";
+                    feedback += "<p>- Try to align your shoulders, hips and ankles in a straight line</p>";
+                } else if (predictedClass === 2) {
+                    feedback += "<p>- Your back is sagging (hips too low)</p>";
+                    feedback += "<p>- Engage your core muscles to keep your body straight</p>";
+                }
+                
+                // Additional feedback based on specific landmarks
+                const leftShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
+                const rightShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
+                const leftHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
+                const rightHip = landmarks[POSE_LANDMARKS.RIGHT_HIP];
+                
+                // Check for shoulder alignment
+                if (Math.abs(leftShoulder.y - rightShoulder.y) > 0.05) {
+                    feedback += "<p>- Your shoulders are uneven. Try to balance them</p>";
+                }
+                
+                // Check for hip alignment
+                if (Math.abs(leftHip.y - rightHip.y) > 0.05) {
+                    feedback += "<p>- Your hips are uneven. Try to balance them</p>";
+                }
+            }
+            
+            feedbackEl.innerHTML = feedback;
+        }
+        
+        // Initialize when page loads
+        window.onload = init;
+    </script>
+</body>
+</html>
