@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Dumbbell, Activity, Home, User, ArrowRight, ChevronRight } from 'lucide-react';
-import BicepClassifier from './BicepClassifier';
-import ExerciseLayout from './ExerciseLayout';
-import PlankClassifier from './PlankClassifier';
-import SquatClassifier from './SquatClassifier';
+import BicepClassifier from './components/BicepClassifier';
+import ExerciseLayout from './components/ExerciseLayout';
+import PlankClassifier from './components/PlankClassifier';
+import SquatClassifier from './components/SquatClassifier';
+import LungeClassifier from './components/LungeClassifier';
 
 type Exercise = {
   id: string;
@@ -46,6 +47,15 @@ const App = () => {
       gif: '/gifs/squat.gif',
       color: 'from-green-400 to-green-600'
     },
+    {
+      id: 'lunge',
+      name: 'Lunge',
+      description: 'Improve your lunge form with AI guidance',
+      icon: <Activity className="w-5 h-5" />,
+      component: <LungeClassifier />,
+      gif: '/gifs/lunge.gif',
+      color: 'from-orange-400 to-orange-600'
+    }
   ];
 
   if (selectedExercise) {
@@ -83,7 +93,7 @@ const App = () => {
                 onClick={() => setSelectedExercise(exercise)}
                 className={`group bg-white rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-transparent hover:border-${exercise.color.split(' ')[1]} overflow-hidden relative`}
               >
-                <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-300 ${exercise.color}"></div>
+                <div className={`absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-300 ${exercise.color}`}></div>
                 <div className="flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4">
                     <div className={`p-3 rounded-full bg-gradient-to-br ${exercise.color} text-white`}>
