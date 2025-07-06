@@ -579,19 +579,6 @@ const LungeClassifier = () => {
       {isRunning && (
         <div className="absolute top-4 right-4 space-y-2">
           <div className="space-y-1">
-            <div className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
-              classification.error 
-                ? 'bg-red-500 bg-opacity-80 text-white' 
-                : 'bg-green-500 bg-opacity-80 text-white'
-            }`}>
-              {classification.error ? (
-                <AlertTriangle className="w-4 h-4" />
-              ) : (
-                <CheckCircle className="w-4 h-4" />
-              )}
-              {classification.error ? 'FORM ERROR' : 'GOOD FORM'}
-            </div>
-            
             <div className={`px-3 py-1 rounded-lg text-sm font-medium ${
               classification.stage === 'init' 
                 ? 'bg-blue-500 bg-opacity-80 text-white' 
