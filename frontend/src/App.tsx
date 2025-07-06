@@ -35,7 +35,7 @@ const App = () => {
       icon: <Dumbbell className="w-5 h-5" />,
       component: <BicepClassifier />,
       gif: '/assets/exercises-gifs/bicep-curls.gif',
-      color: 'from-[#2565EB] to-[#6465F1]',
+      color: 'from-[#3B82F6] to-[#8B5CF6]',
       youtubeId: 'ykJmrZ5v0Oo',
       instructions: {
         title: 'Perfect Your Bicep Curl',
@@ -48,7 +48,7 @@ const App = () => {
         ],
         targetMuscles: ['Biceps', 'Forearms', 'Core'],
         difficulty: 'Beginner',
-        duration: '3-4 sets of 8-12 reps'
+        duration: 'Flexible'
       }
     },
     {
@@ -58,8 +58,8 @@ const App = () => {
       icon: <Activity className="w-5 h-5" />,
       component: <PlankClassifier />,
       gif: 'assets/exercises-gifs/plank.gif',
-      color: 'from-[#9234EA] to-[#6465F1]',
-      youtubeId: 'ASdvN_XEl_c',
+      color: 'from-[#A855F7] to-[#EC4899]',
+      youtubeId: 'pSHjTRCQxIw',
       instructions: {
         title: 'Master the Perfect Plank',
         tips: [
@@ -81,7 +81,7 @@ const App = () => {
       icon: <Activity className="w-5 h-5" />,
       component: <SquatClassifier />,
       gif: 'assets/exercises-gifs/squat.gif',
-      color: 'from-[#06976A] to-[#34D399]',
+      color: 'from-[#10B981] to-[#06B6D4]',
       youtubeId: 'YaXPRqUwItQ',
       instructions: {
         title: 'Execute the Perfect Squat',
@@ -94,7 +94,7 @@ const App = () => {
         ],
         targetMuscles: ['Quadriceps', 'Glutes', 'Hamstrings', 'Core'],
         difficulty: 'Beginner',
-        duration: '3-4 sets of 10-15 reps'
+        duration: 'Flexible'
       }
     },
     {
@@ -104,7 +104,7 @@ const App = () => {
       icon: <Activity className="w-5 h-5" />,
       component: <LungeClassifier />,
       gif: 'assets/exercises-gifs/lunges.gif',
-      color: 'from-[#22D2EE] to-[#2565EB]',
+      color: 'from-[#F59E0B] to-[#EF4444]',
       youtubeId: 'ASdqJoDPMHA',
       instructions: {
         title: 'Master the Forward Lunge',
@@ -117,7 +117,7 @@ const App = () => {
         ],
         targetMuscles: ['Quadriceps', 'Glutes', 'Hamstrings', 'Calves'],
         difficulty: 'Intermediate',
-        duration: '3 sets of 10-12 reps per leg'
+        duration: 'Flexible'
       }
     }
   ];
@@ -132,35 +132,35 @@ const App = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-[#9234EA] to-black">
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj4KPGcgZmlsbD0iIzllYTNiYSIgZmlsbC1vcGFjaXR5PSIwLjAzIj4KPGNpcmNsZSBjeD0iMjkiIGN5PSIyOSIgcj0iMS41Ii8+CjxwYXRoIGQ9Im0yOS01LTUtNWgxMFptMCAxMGwtNS01aDE0bC00IDR6bTAgMTBsLTUtNWgxNGwtNCA0em0wIDEwbC01LTVoMTRsLTQgNHptMCAxMGwtNS01aDE0bC00IDR6bTIwIDEwbC01LTVoMTRsLTQgNHoiLz4KPC9nPgo8L2c+Cjwvc3ZnPg==')] opacity-20"></div>
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj4KPGcgZmlsbD0iIzhlYTNiYSIgZmlsbC1vcGFjaXR5PSIwLjA1Ij4KPGNpcmNsZSBjeD0iMjkiIGN5PSIyOSIgcj0iMS41Ii8+CjxwYXRoIGQ9Im0yOS01LTUtNWgxMFptMCAxMGwtNS01aDE0bC00IDR6bTAgMTBsLTUtNWgxNGwtNCA0em0wIDEwbC01LTVoMTRsLTQgNHptMCAxMGwtNS01aDE0bC00IDR6bTIwIDEwbC01LTVoMTRsLTQgNHoiLz4KPC9nPgo8L2c+Cjwvc3ZnPg==')] opacity-30"></div>
       
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Hero Section */}
         <div className="text-center mb-20">
           <div className="flex justify-center mb-6">
-            <div className="p-4 bg-gradient-to-r from-[#2565EB] to-[#9234EA] rounded-full shadow-lg">
+            <div className="p-4 bg-gradient-to-r from-[#3B82F6] to-[#A855F7] rounded-full shadow-xl">
               <Dumbbell className="w-12 h-12 text-white" />
             </div>
           </div>
-          <h1 className="text-6xl font-black bg-gradient-to-r from-white via-[#22D2EE] to-[#9234EA] bg-clip-text text-transparent mb-6">
+          <h1 className="text-6xl font-black bg-gradient-to-r from-[#3B82F6] via-[#A855F7] to-[#EC4899] bg-clip-text text-transparent mb-6">
             AI Fitness Trainer
           </h1>
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Transform your workouts with cutting-edge AI technology. Get real-time form correction, 
             personalized feedback, and take your fitness to the next level.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-            <div className="flex items-center gap-2 text-[#34D399] font-medium">
-              <div className="w-2 h-2 bg-[#34D399] rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2 text-[#10B981] font-medium">
+              <div className="w-2 h-2 bg-[#10B981] rounded-full animate-pulse"></div>
               AI-Powered Analysis
             </div>
-            <div className="flex items-center gap-2 text-[#22D2EE] font-medium">
-              <div className="w-2 h-2 bg-[#22D2EE] rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2 text-[#06B6D4] font-medium">
+              <div className="w-2 h-2 bg-[#06B6D4] rounded-full animate-pulse"></div>
               Real-time Feedback
             </div>
-            <div className="flex items-center gap-2 text-[#9234EA] font-medium">
-              <div className="w-2 h-2 bg-[#9234EA] rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2 text-[#A855F7] font-medium">
+              <div className="w-2 h-2 bg-[#A855F7] rounded-full animate-pulse"></div>
               Form Correction
             </div>
           </div>
@@ -168,8 +168,8 @@ const App = () => {
 
         {/* Exercises Grid */}
         <div className="mb-20">
-          <h2 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-r from-[#2565EB] to-[#9234EA] rounded-lg">
+          <h2 className="text-3xl font-bold text-gray-800 mb-8 flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-r from-[#3B82F6] to-[#A855F7] rounded-lg">
               <Activity className="w-6 h-6 text-white" />
             </div>
             Choose Your Exercise
@@ -179,7 +179,7 @@ const App = () => {
               <div 
                 key={exercise.id}
                 onClick={() => setSelectedExercise(exercise)}
-                className="group bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20 hover:border-white/40 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-[#9234EA]/20"
+                className="group bg-white/70 backdrop-blur-lg rounded-3xl p-8 border border-white/40 hover:border-purple-200 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20"
               >
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-4">
@@ -187,11 +187,11 @@ const App = () => {
                       {exercise.icon}
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-white">{exercise.name}</h3>
-                      <p className="text-gray-300 text-sm">AI-Guided Training</p>
+                      <h3 className="text-2xl font-bold text-gray-800">{exercise.name}</h3>
+                      <p className="text-gray-600 text-sm">AI-Guided Training</p>
                     </div>
                   </div>
-                  <div className="w-24 h-24 bg-gradient-to-br from-white/20 to-white/10 rounded-2xl overflow-hidden border border-white/20 group-hover:border-white/40 transition-all duration-300">
+                  <div className="w-24 h-24 bg-gradient-to-br from-white/60 to-gray-100/60 rounded-2xl overflow-hidden border border-gray-200 group-hover:border-purple-300 transition-all duration-300">
                     <img 
                       src={exercise.gif} 
                       alt={exercise.name} 
@@ -199,13 +199,13 @@ const App = () => {
                     />
                   </div>
                 </div>
-                <p className="text-gray-300 mb-6 text-lg">{exercise.description}</p>
+                <p className="text-gray-600 mb-6 text-lg">{exercise.description}</p>
                 <div className="flex justify-between items-center">
-                  <span className="text-white font-semibold flex items-center gap-2 group-hover:text-[#22D2EE] transition-colors">
+                  <span className="text-gray-800 font-semibold flex items-center gap-2 group-hover:text-[#06B6D4] transition-colors">
                     Start Training <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </span>
-                  <div className="flex items-center gap-1 text-gray-400">
-                    <div className="w-2 h-2 bg-[#34D399] rounded-full animate-pulse"></div>
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <div className="w-2 h-2 bg-[#10B981] rounded-full animate-pulse"></div>
                     <span className="text-sm">Ready</span>
                   </div>
                 </div>
@@ -215,10 +215,10 @@ const App = () => {
         </div>
 
         {/* How It Works Section */}
-        <div className="bg-gradient-to-r from-white/10 to-white/5 backdrop-blur-lg rounded-3xl p-10 border border-white/20 shadow-2xl">
+        <div className="bg-gradient-to-r from-white/60 to-white/40 backdrop-blur-lg rounded-3xl p-10 border border-white/40 shadow-2xl">
           <div className="max-w-5xl mx-auto">
-            <h3 className="text-3xl font-bold text-white mb-10 flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-r from-[#2565EB] to-[#9234EA] rounded-2xl">
+            <h3 className="text-3xl font-bold text-gray-800 mb-10 flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-r from-[#3B82F6] to-[#A855F7] rounded-2xl">
                 <Activity className="w-8 h-8 text-white" />
               </div>
               How It Works
@@ -254,17 +254,17 @@ const App = () => {
                   <div className="text-center">
                     <div className="mb-4 flex justify-center">
                       <div className="relative">
-                        <div className="w-16 h-16 bg-gradient-to-br from-[#2565EB] to-[#9234EA] rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                        <div className="w-16 h-16 bg-gradient-to-br from-[#3B82F6] to-[#A855F7] rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg">
                           {item.step}
                         </div>
                         <div className="absolute -top-1 -right-1 text-2xl">{item.icon}</div>
                       </div>
                     </div>
-                    <h4 className="font-bold text-white text-lg mb-2">{item.title}</h4>
-                    <p className="text-gray-300 text-sm leading-relaxed">{item.description}</p>
+                    <h4 className="font-bold text-gray-800 text-lg mb-2">{item.title}</h4>
+                    <p className="text-gray-600 text-sm leading-relaxed">{item.description}</p>
                   </div>
                   {index < 3 && (
-                    <div className="hidden lg:block absolute top-8 -right-4 w-8 h-0.5 bg-gradient-to-r from-[#2565EB] to-[#9234EA]"></div>
+                    <div className="hidden lg:block absolute top-8 -right-4 w-8 h-0.5 bg-gradient-to-r from-[#3B82F6] to-[#A855F7]"></div>
                   )}
                 </div>
               ))}
@@ -275,23 +275,19 @@ const App = () => {
         {/* Footer CTA */}
         <div className="mt-20 text-center">
           <div className="max-w-2xl mx-auto">
-            <h3 className="text-2xl font-bold text-white mb-4">
+            <h3 className="text-2xl font-bold text-gray-800 mb-4">
               Ready to Transform Your Fitness Journey?
             </h3>
-            <p className="text-gray-300 mb-8 text-lg leading-relaxed">
+            <p className="text-gray-600 mb-8 text-lg leading-relaxed">
               Join thousands of users who have improved their form and achieved their fitness goals with our AI-powered personal trainer.
             </p>
             <div className="flex justify-center gap-8 text-sm">
-              <div className="flex items-center gap-2 text-[#34D399]">
-                <div className="w-2 h-2 bg-[#34D399] rounded-full"></div>
+              <div className="flex items-center gap-2 text-[#10B981]">
+                <div className="w-2 h-2 bg-[#10B981] rounded-full"></div>
                 <span>Free to use</span>
               </div>
-              <div className="flex items-center gap-2 text-[#22D2EE]">
-                <div className="w-2 h-2 bg-[#22D2EE] rounded-full"></div>
-                <span>No signup required</span>
-              </div>
-              <div className="flex items-center gap-2 text-[#9234EA]">
-                <div className="w-2 h-2 bg-[#9234EA] rounded-full"></div>
+              <div className="flex items-center gap-2 text-[#A855F7]">
+                <div className="w-2 h-2 bg-[#A855F7] rounded-full"></div>
                 <span>Privacy focused</span>
               </div>
             </div>
