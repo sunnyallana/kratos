@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Play, Square, Activity, Eye, EyeOff, Brain, CheckCircle, AlertTriangle } from 'lucide-react';
 import * as tf from '@tensorflow/tfjs';
+import warningSound from '/assets/audio/warning-sound.mp3';
+
 
 declare global {
   interface Window {
@@ -39,6 +41,7 @@ const BicepClassifier = () => {
   const [rightAngle, setRightAngle] = useState(0);
   const [classification, setClassification] = useState<ClassificationResult>({ class: 'correct', confidence: 0 });
   const [isProcessing, setIsProcessing] = useState(false);
+
   
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -52,6 +55,8 @@ const BicepClassifier = () => {
   const rightCounterRef = useRef(0);
   const animationIdRef = useRef<number | null>(null);
   const isRunningRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isSoundPlayingRef = useRef(false);
   
   // Constants
   const STAGE_UP_THRESHOLD = 90;
@@ -72,6 +77,18 @@ const BicepClassifier = () => {
     LEFT_HIP: 23,
     RIGHT_HIP: 24,
   };
+
+
+  // Add this useEffect for audio cleanup:
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
 
   // Initialize everything
   useEffect(() => {
@@ -493,6 +510,24 @@ const BicepClassifier = () => {
       // Add AI-based warnings
       if (aiResult.class === 'low_form' && aiResult.confidence > 0.7) {
         warnings.push("AI detected poor form - focus on controlled movement");
+      }
+      
+      // Play warning sound if there are new warnings and sound isn't already playing
+      if (warnings.length > 0 && !isSoundPlayingRef.current) {
+        isSoundPlayingRef.current = true;
+        
+        // Create or reuse audio element
+        if (!audioRef.current) {
+          audioRef.current = new Audio(warningSound);
+          audioRef.current.onended = () => {
+            isSoundPlayingRef.current = false;
+          };
+        }
+        
+        audioRef.current.play().catch(error => {
+          console.error("Audio playback failed:", error);
+          isSoundPlayingRef.current = false;
+        });
       }
       
       setCurrentWarnings(warnings);
